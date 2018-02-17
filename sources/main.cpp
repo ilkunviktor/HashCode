@@ -65,6 +65,7 @@ int main()
 			uint cachesConnected = 0;
 			vector<EndpointCache> caches;
 
+			map<uint, set<uint>> videoToRequests;
 			set<uint> requestsId; // by id
 		};
 
@@ -112,6 +113,15 @@ int main()
 			fileIn >> r.videoId >> r.endpointId >> r.count;
 
 			endpoints[r.endpointId].requestsId.insert(r.id);
+			
+			auto videoRequestIt = endpoints[r.endpointId].videoToRequests.find(r.videoId);
+
+			if (videoRequestIt == endpoints[r.endpointId].videoToRequests.end())
+			{
+				endpoints[r.endpointId].videoToRequests[r.videoId] = set<uint>();
+			}
+
+			endpoints[r.endpointId].videoToRequests[r.videoId].insert(r.id);
 
 			requests.emplace_back(r);
 		}
@@ -125,14 +135,13 @@ int main()
 		{
 			uint cacheId = 0;
 
-			set<uint> videoIds; // result
 			uint payload = 0;
 
 			set<uint> endpointsConnected; // by id
 			set<uint> videoIdsPending; // by id
-			
+
 			map<uint, uint> videoScores; // key = id
-			
+
 			set<uint> videoIdsLoaded; // key = id
 			uint scoreTotal = 0;
 		};
@@ -148,49 +157,104 @@ int main()
 			}
 		}
 
-		for (auto&& cache : caches)
+		while (!caches.empty())
 		{
-			for (auto&& endpointId : cache.second.endpointsConnected)
+			for (auto&& cache : caches)
 			{
-				for (auto&& requestId : endpoints[endpointId].requestsId)
-				{
-					cache.second.videoIdsPending.insert(requests[requestId].videoId);
-				}
-			}
-		}
-
-		for (auto&& cache : caches)
-		{
-			for (auto&& videoId : cache.second.videoIdsPending)
-			{
-				uint videoScore = 0;
-
 				for (auto&& endpointId : cache.second.endpointsConnected)
 				{
 					for (auto&& requestId : endpoints[endpointId].requestsId)
 					{
-						if (requests[requestId].videoId == videoId)
-						{
-							videoScore += (endpoints[endpointId].latencyDatacenter - 
-								endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId].count;
-						}
+						cache.second.videoIdsPending.insert(requests[requestId].videoId);
 					}
 				}
+			}
 
-				cache.second.videoScores[videoId] = videoScore;
+			for (auto&& cache : caches)
+			{
+				for (auto&& videoId : cache.second.videoIdsPending)
+				{
+					uint videoScore = 0;
+
+					for (auto&& endpointId : cache.second.endpointsConnected)
+					{
+						auto videoIdIt = endpoints[endpointId].videoToRequests.find(videoId);
+
+						if (videoIdIt != endpoints[endpointId].videoToRequests.end())
+						{
+
+
+
+							videoScore += (endpoints[endpointId].latencyDatacenter -
+								endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[*requestIdIt].count;
+						}
+
+
+						auto requestIdIt = find_if(endpoints[endpointId].requestsId.begin(),
+							endpoints[endpointId].requestsId.end(),
+							[&requests, &videoId](const uint& requestId)
+						{
+							return requests[requestId].videoId == videoId;
+						});
+
+						if (requestIdIt != endpoints[endpointId].requestsId.end())
+						{
+							videoScore += (endpoints[endpointId].latencyDatacenter -
+								endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[*requestIdIt].count;
+						}
+						/*
+						for (auto&& requestId : )
+						{
+							if (requests[requestId].videoId == videoId)
+							{
+								videoScore += (endpoints[endpointId].latencyDatacenter -
+									endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId].count;
+							}
+						}
+						*/
+					}
+
+					cache.second.videoScores[videoId] = videoScore;
+				}
+			}
+
+			auto FindCacheScore = [](Cache& c)
+			{
+				uint videoId = *c.videoIdsPending.begin();
+				c.videoIdsLoaded.insert(videoId);
+
+				c.scoreTotal = c.videoScores[videoId];
+			};
+
+			for (auto&& cache : caches)
+			{
+				FindCacheScore(cache.second);
+			}
+
+			uint cacheIdScoreMax = -1;
+			uint cachScoreTotalMax = 0;
+
+			for (auto&& cache : caches)
+			{
+				if (cache.second.scoreTotal > cachScoreTotalMax)
+				{
+					cachScoreTotalMax = cache.second.scoreTotal;
+					cacheIdScoreMax = cache.second.cacheId;
+				}
+			}
+
+			auto cacheIt = caches.find(cacheIdScoreMax);
+
+			if (cacheIt != caches.end())
+			{
+				result[cacheIt->second.cacheId] = cacheIt->second.videoIdsLoaded;
+				caches.erase(cacheIt);
+			}
+			else
+			{
+				break;
 			}
 		}
-
-		auto FindCacheScore = [](Cache& c)
-		{
-
-		};
-
-		for (auto&& cache : caches)
-		{
-			FindCacheScore(cache.second);
-		}	
-
 
 		// output
 		ofstream fileOut;
@@ -214,7 +278,46 @@ int main()
 		fileOut.close();
 
 		// score
-		uint64_t score = 0;
+		uint score = 0;
+
+		uint requestsTotalCount = 0;
+
+		for (const auto& r : requests)
+		{
+			requestsTotalCount += r.count;
+		}
+
+		uint reqUp = 0;
+
+		for (const auto& r : requests)
+		{
+			//r.videoId
+			uint requestLatency = endpoints[r.endpointId].latencyDatacenter;
+
+			for (const auto& cache : endpoints[r.endpointId].caches)
+			{
+				auto cacheResultedIt = result.find(cache.cacheId);
+
+				if (cacheResultedIt != result.end())
+				{
+					auto videoIt = cacheResultedIt->second.find(r.videoId);
+
+					if (videoIt != cacheResultedIt->second.end())
+					{
+						uint cacheLatency = endpoints[r.endpointId].caches[cacheResultedIt->first].latency;
+
+						if (cacheLatency < requestLatency)
+						{
+							requestLatency = cacheLatency;
+						}
+					}
+				}
+			}
+
+			reqUp += (endpoints[r.endpointId].latencyDatacenter - requestLatency) * r.count;
+		}
+
+		score = (uint)floor((double)reqUp / (double)requestsTotalCount);
 		scoreTotal += score;
 		// timing
 		chrono::time_point<std::chrono::system_clock> timeEnd =
