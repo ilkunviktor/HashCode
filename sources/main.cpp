@@ -45,12 +45,73 @@ int main()
 		fileIn.open(filePathIn);
 		assert(fileIn.is_open());
 
-		//fileIn >>
+		using uint = uint64_t;
+		uint videosCount = 0;
+		uint endpointsCount = 0;
+		uint requestsCount = 0;
+		uint cachesCount = 0;
+		uint cachePayload = 0;
+		vector<uint> videosSizes;
+
+		struct EndpointCache
+		{
+			uint cacheId = 0;
+			uint latency = 0;
+		};
+
+		struct Endpoint
+		{
+			uint latencyDatacenter = 0;
+			uint cachesConnected = 0;
+			vector<EndpointCache> caches;
+		};
+
+		vector<Endpoint> endpoints;
+
+		struct Request
+		{
+			uint count = 0;
+			uint videoId = 0;
+			uint endpointId = 0;
+		};
+
+		vector<Request> requests;
+
+		fileIn >> videosCount >> endpointsCount >> requestsCount >> cachesCount >> cachePayload;
+
+		for (uint i = 0; i < videosCount; ++i)
+		{
+			uint size = 0;
+			fileIn >> size;
+			videosSizes.emplace_back(size);
+		}
+
+		for (uint i = 0; i < endpointsCount; ++i)
+		{
+			Endpoint e;
+			fileIn >> e.latencyDatacenter >> e.cachesConnected;
+
+			for (uint c = 0; c < e.cachesConnected; ++c)
+			{
+				EndpointCache ec;
+				fileIn >> ec.cacheId >> ec.latency;
+				e.caches.emplace_back(ec);
+			}
+
+			endpoints.emplace_back(e);
+		}
+
+		for (uint i = 0; i < requestsCount; ++i)
+		{
+			Request r;
+			fileIn >> r.videoId >> r.endpointId >> r.count;
+			requests.emplace_back(r);
+		}
 
 		fileIn.close();
 
 		// solve
-
+		map<uint, set<uint>> result; // key = cacheid , value = videIds
 
 		// output
 		ofstream fileOut;
