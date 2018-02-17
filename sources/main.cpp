@@ -111,14 +111,31 @@ int main()
 		fileIn.close();
 
 		// solve
-		map<uint, set<uint>> result; // key = cacheid , value = videIds
+		map<uint, set<uint>> result; // key = cacheid , value = videoIds
+
+		struct Cashe
+		{
+
+		};
 
 		// output
 		ofstream fileOut;
 		fileOut.open(filePathOut);
 		assert(fileOut.is_open());
 
-		// fileOut <<  << endl;
+		fileOut << result.size() << endl;
+
+		for (const auto& cacheIt : result)
+		{
+			fileOut << cacheIt.first;
+
+			for (const auto& videoIt : cacheIt.second)
+			{
+				fileOut << " " << videoIt;
+			}
+			
+			fileOut << endl;
+		}
 
 		fileOut.close();
 
