@@ -64,12 +64,16 @@ int main()
 			uint latencyDatacenter = 0;
 			uint cachesConnected = 0;
 			vector<EndpointCache> caches;
+
+			set<uint> requestsId; // by id
 		};
 
 		vector<Endpoint> endpoints;
 
 		struct Request
 		{
+			uint id = 0;
+
 			uint count = 0;
 			uint videoId = 0;
 			uint endpointId = 0;
@@ -104,7 +108,11 @@ int main()
 		for (uint i = 0; i < requestsCount; ++i)
 		{
 			Request r;
+			r.id = i;
 			fileIn >> r.videoId >> r.endpointId >> r.count;
+
+			endpoints[r.endpointId].requestsId.insert(r.id);
+
 			requests.emplace_back(r);
 		}
 
@@ -113,10 +121,69 @@ int main()
 		// solve
 		map<uint, set<uint>> result; // key = cacheid , value = videoIds
 
-		struct Cashe
+		struct Cache
 		{
+			uint cacheId = 0;
 
+			set<uint> videoIds; // result
+			uint payload = 0;
+
+			set<uint> endpointsConnected; // by id
+			set<uint> videoIdsPending; // by id
+			
+			map<uint, uint> videoScores; // key = id
+			
+			set<uint> videoIdsLoaded; // key = id
+			uint scoreTotal = 0;
 		};
+
+		map<uint, Cache> caches; // key = id cache
+
+		for (uint endpointId = 0; endpointId < endpointsCount; ++endpointId)
+		{
+			for (const auto& cache : endpoints[endpointId].caches)
+			{
+				caches[cache.cacheId].cacheId = cache.cacheId;
+				caches[cache.cacheId].endpointsConnected.insert(endpointId);
+			}
+		}
+
+		for (auto&& cache : caches)
+		{
+			for (auto&& endpointId : cache.second.endpointsConnected)
+			{
+				for (auto&& requestId : endpoints[endpointId].requestsId)
+				{
+					cache.second.videoIdsPending.insert(requests[requestId].videoId);
+				}
+			}
+		}
+
+		for (auto&& cache : caches)
+		{
+			for (auto&& videoId : cache.second.videoIdsPending)
+			{
+				uint videoScore = 0;
+
+				for (auto&& endpointId : cache.second.endpointsConnected)
+				{
+					for (auto&& requestId : endpoints[endpointId].requestsId)
+					{
+						if (requests[requestId].videoId == videoId)
+						{
+							videoScore += (endpoints[endpointId].latencyDatacenter - 
+								endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId].count;
+						}
+					}
+				}
+
+				cache.second.videoScores[videoId] = videoScore;
+			}
+		}
+
+
+
+
 
 		// output
 		ofstream fileOut;
