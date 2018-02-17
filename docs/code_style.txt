@@ -1,0 +1,10 @@
+sources in one file
+less Forward declarations
+less smart ptr
+less &
+less const
+less using
+no namespaces!
+no Get Set methods
+no auto (only in for(auto&& a : range)), and with iterators
+no static_cast, just (type_t)a
