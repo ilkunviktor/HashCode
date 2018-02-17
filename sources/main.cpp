@@ -181,8 +181,15 @@ int main()
 			}
 		}
 
+		auto FindCacheScore = [](Cache& c)
+		{
 
+		};
 
+		for (auto&& cache : caches)
+		{
+			FindCacheScore(cache.second);
+		}	
 
 
 		// output
