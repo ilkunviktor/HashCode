@@ -7,7 +7,7 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
-#include <assert.h> 
+#include <cassert>
 #include <string>
 #include <ctime>
 #include <iomanip>
