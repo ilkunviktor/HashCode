@@ -63,9 +63,9 @@ int main()
 		{
 			uint latencyDatacenter = 0;
 			uint cachesConnected = 0;
-			vector<EndpointCache> caches;
+			map<uint, EndpointCache> caches;
 
-			map<uint, set<uint>> videoToRequests;
+			map<uint, uint> videoToRequests;
 			set<uint> requestsId; // by id
 		};
 
@@ -100,7 +100,8 @@ int main()
 			{
 				EndpointCache ec;
 				fileIn >> ec.cacheId >> ec.latency;
-				e.caches.emplace_back(ec);
+				//e.caches.emplace_back(ec);
+				e.caches[ec.cacheId] = ec;
 			}
 
 			endpoints.emplace_back(e);
@@ -114,14 +115,8 @@ int main()
 
 			endpoints[r.endpointId].requestsId.insert(r.id);
 			
-			auto videoRequestIt = endpoints[r.endpointId].videoToRequests.find(r.videoId);
-
-			if (videoRequestIt == endpoints[r.endpointId].videoToRequests.end())
-			{
-				endpoints[r.endpointId].videoToRequests[r.videoId] = set<uint>();
-			}
-
-			endpoints[r.endpointId].videoToRequests[r.videoId].insert(r.id);
+			auto videoRequestIt = endpoints[r.endpointId].videoToRequests.find(r.videoId);			
+			endpoints[r.endpointId].videoToRequests[r.videoId] = r.id;						
 
 			requests.emplace_back(r);
 		}
@@ -152,14 +147,70 @@ int main()
 		{
 			for (const auto& cache : endpoints[endpointId].caches)
 			{
-				caches[cache.cacheId].cacheId = cache.cacheId;
-				caches[cache.cacheId].endpointsConnected.insert(endpointId);
+				caches[cache.first].cacheId = cache.first;
+				caches[cache.first].endpointsConnected.insert(endpointId);
+			}
+		}
+
+		for (auto&& cache : caches)
+		{
+			for (auto&& endpointId : cache.second.endpointsConnected)
+			{
+				for (auto&& requestId : endpoints[endpointId].requestsId)
+				{
+					cache.second.videoIdsPending.insert(requests[requestId].videoId);
+				}
+			}
+		}
+
+		for (auto&& cache : caches)
+		{
+			for (auto&& videoId : cache.second.videoIdsPending)
+			{
+				uint videoScore = 0;
+
+				for (auto&& endpointId : cache.second.endpointsConnected)
+				{
+					const auto requestId = endpoints[endpointId].videoToRequests.find(videoId);
+
+					if (requestId != endpoints[endpointId].videoToRequests.end())
+					{
+						videoScore += (endpoints[endpointId].latencyDatacenter -
+							endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId->second].count;
+					}
+
+
+					/*auto requestIdIt = find_if(endpoints[endpointId].requestsId.begin(),
+					endpoints[endpointId].requestsId.end(),
+					[&requests, &videoId](const uint& requestId)
+					{
+					return requests[requestId].videoId == videoId;
+					});
+
+					if (requestIdIt != endpoints[endpointId].requestsId.end())
+					{
+					videoScore += (endpoints[endpointId].latencyDatacenter -
+					endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[*requestIdIt].count;
+					}*/
+					/*
+					for (auto&& requestId : )
+					{
+					if (requests[requestId].videoId == videoId)
+					{
+					videoScore += (endpoints[endpointId].latencyDatacenter -
+					endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId].count;
+					}
+					}
+					*/
+				}
+
+				cache.second.videoScores[videoId] = videoScore;
 			}
 		}
 
 		while (!caches.empty())
 		{
-			for (auto&& cache : caches)
+			/*for (auto&& cache : caches)
 			{
 				for (auto&& endpointId : cache.second.endpointsConnected)
 				{
@@ -168,63 +219,77 @@ int main()
 						cache.second.videoIdsPending.insert(requests[requestId].videoId);
 					}
 				}
-			}
+			}*/
 
-			for (auto&& cache : caches)
-			{
-				for (auto&& videoId : cache.second.videoIdsPending)
-				{
-					uint videoScore = 0;
+			//for (auto&& cache : caches)
+			//{
+			//	for (auto&& videoId : cache.second.videoIdsPending)
+			//	{
+			//		uint videoScore = 0;
 
-					for (auto&& endpointId : cache.second.endpointsConnected)
-					{
-						auto videoIdIt = endpoints[endpointId].videoToRequests.find(videoId);
+			//		for (auto&& endpointId : cache.second.endpointsConnected)
+			//		{
+			//			const auto requestId = endpoints[endpointId].videoToRequests.find(videoId);
 
-						if (videoIdIt != endpoints[endpointId].videoToRequests.end())
-						{
-
-
-
-							videoScore += (endpoints[endpointId].latencyDatacenter -
-								endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[*requestIdIt].count;
-						}
+			//			if (requestId != endpoints[endpointId].videoToRequests.end())
+			//			{							
+			//				videoScore += (endpoints[endpointId].latencyDatacenter -
+			//					endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId->second].count;
+			//			}
 
 
-						auto requestIdIt = find_if(endpoints[endpointId].requestsId.begin(),
-							endpoints[endpointId].requestsId.end(),
-							[&requests, &videoId](const uint& requestId)
-						{
-							return requests[requestId].videoId == videoId;
-						});
+			//			/*auto requestIdIt = find_if(endpoints[endpointId].requestsId.begin(),
+			//				endpoints[endpointId].requestsId.end(),
+			//				[&requests, &videoId](const uint& requestId)
+			//			{
+			//				return requests[requestId].videoId == videoId;
+			//			});
 
-						if (requestIdIt != endpoints[endpointId].requestsId.end())
-						{
-							videoScore += (endpoints[endpointId].latencyDatacenter -
-								endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[*requestIdIt].count;
-						}
-						/*
-						for (auto&& requestId : )
-						{
-							if (requests[requestId].videoId == videoId)
-							{
-								videoScore += (endpoints[endpointId].latencyDatacenter -
-									endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId].count;
-							}
-						}
-						*/
-					}
+			//			if (requestIdIt != endpoints[endpointId].requestsId.end())
+			//			{
+			//				videoScore += (endpoints[endpointId].latencyDatacenter -
+			//					endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[*requestIdIt].count;
+			//			}*/
+			//			/*
+			//			for (auto&& requestId : )
+			//			{
+			//				if (requests[requestId].videoId == videoId)
+			//				{
+			//					videoScore += (endpoints[endpointId].latencyDatacenter -
+			//						endpoints[endpointId].caches[cache.second.cacheId].latency) * requests[requestId].count;
+			//				}
+			//			}
+			//			*/
+			//		}
 
-					cache.second.videoScores[videoId] = videoScore;
-				}
-			}
+			//		cache.second.videoScores[videoId] = videoScore;
+			//	}
+			//}
 
 			auto FindCacheScore = [](Cache& c)
+			{
+				uint max = 0;
+				uint indexMax = 0;
+				for (auto&& score : c.videoScores)
+				{
+					if (score.second>max)
+					{
+						indexMax = score.first;
+						max = score.second;
+					}
+				}
+
+				c.videoIdsLoaded.insert(indexMax);
+				c.scoreTotal = c.videoScores[indexMax];
+			};
+
+	/*		auto FindCacheScore = [](Cache& c)
 			{
 				uint videoId = *c.videoIdsPending.begin();
 				c.videoIdsLoaded.insert(videoId);
 
 				c.scoreTotal = c.videoScores[videoId];
-			};
+			};*/
 
 			for (auto&& cache : caches)
 			{
@@ -296,7 +361,7 @@ int main()
 
 			for (const auto& cache : endpoints[r.endpointId].caches)
 			{
-				auto cacheResultedIt = result.find(cache.cacheId);
+				auto cacheResultedIt = result.find(cache.first);
 
 				if (cacheResultedIt != result.end())
 				{
